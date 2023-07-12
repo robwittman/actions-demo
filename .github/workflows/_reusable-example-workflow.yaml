@@ -1,0 +1,70 @@
+on:
+  workflow_call:
+    inputs:
+      ## In a lot of cases, this is pretty sufficient
+      ## We're usually using only one major version of
+      ## node across most projects, and overriding it
+      ## using `.with.node_version: 20` or something
+      ## is straightforward
+      node_version:
+        description: "The version of Node JS to use"
+        type: string
+        default: 16
+
+env: {}
+
+jobs:
+  test:
+    name: build and test
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: ${{ inputs.node_version }}
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test
+
+      ## This is the type of job where configuring it can get
+      ## to be a bit of a pain. Say we support uploading the
+      ## test coverage reports, or build outputs, etc in multiple
+      ## storage locations. AWS, GCP, and on. We could add
+      ## ${{ inputs.cloud }}, but each one then has a handful of various
+      ## configurations needed to connect and upload.
+      - name: Configure AWS Credentials
+        id: aws_credentials
+        # I think since we have a limited number of options we support,
+        # using an input to swap the cloud makes sense (to me). Any
+        # jobs related to a specific cloud can be enabled when needed
+        if: ${{ inputs.storage == 'aws' }}
+        uses: aws-actions/configure-aws-credentials@v1-node16
+        with:
+          # Here is where occasionally things get verbose. So now we support
+          # multiple clouds, we need to expose each individual configuration
+          # for each cloud as a top level input. It would be nice if we could
+          # honestly just leave it blank (or have a default), and then
+          # the caller could dynamically set these
+          role-to-assume: ${{ inputs.iam_role_arn }}
+          aws-region: ${{ inputs.region }}
+
+      - uses: shallwefootball/s3-upload-action@master
+        if: ${{ inputs.storage == 'aws' }}
+        with:
+          source_dir: 'dirname'
+
+      ## Let's also configure a block for GCP
+      - id: gcp_credentials
+        if: ${{ inputs.storage == 'gcp' }}
+        uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider:
+          service_account:
+
+      - uses: google-github-actions/upload-cloud-storage@v1
+        id: gcp_upload
+        if: ${{ inputs.storage == 'gcp' }}
+        with:
+          path: dirname
+          destination:

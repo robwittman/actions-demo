@@ -1,0 +1,68 @@
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  node_aws:
+    uses: ./.github/workflows/_reusable-example-workflow.yaml
+    with:
+      cloud: aws
+    # This is a seat of my pants implementation to describe what I'd
+    # be _trying_ to do. I'm sure there are less verbose ways to
+    # structure this.
+    set:
+      - path: jobs.test.steps.aws_credentials.iam_role_arn
+        value: arn:aws:iam::account:role/role-name-with-path
+      - path: jobs.test.steps.aws_credentials.region
+        value: us-west-2
+
+    # Alternatively, maybe a smaller ask is support for 'object' and 'array' inputs?
+    with:
+      cloud: aws
+      # Maybe this maps to the
+      aws_credentials:
+        iam_role_arn: arn:aws:iam::account:role/role-name-with-path
+
+  # Maybe we have only one client  that requires their stuff
+  # be stored on GCP. Or we have another site for it for DR purposes.
+  node_gcp:
+    uses: ./.github/workflows/_reusable-example-workflow.yaml
+    with:
+      cloud: gcp
+    set:
+      - path: jobs.test.steps.gcp_credentials.workload_identity_provider
+        value: "/some/workload/identity/provider"
+      - path: jobs.test.steps.gcp_credentials.workload_identity_provider
+        value: myapp@googleserviceaccount.com
+      - path: jobs.test.steps.gcp_upload.destination
+        value: my-customers-bucket/filepath
+
+
+  # From a different perspective, rather than wanting to reconfigure several steps
+  # based on some initial setting (i.e., '.with.cloud' above), we just have some
+  # services that require changing a handful of settings. While these no reason
+  # they can't be set as inputs explicitly on the calling workflow, it can get
+  # pretty cumbersome.
+
+  # Here, we deploy to an internal system, and all of the defaults are fine
+  deploy_internal:
+    uses: ./.github/workflows/_reusable-deploy-example.yaml
+
+  # For this one, possibly we're deploying to a separate organizations Flux repo?
+  # Its a bit of a contrived example, but generally highlights the ask
+  deploy_some_external_repository:
+    uses: ./.github/workflows/_reusable-deploy-example.yaml
+    with:
+      flux_repository: some-other-org/flux-stuff
+    set:
+      - path: jobs.deploy.steps.cpr.title
+        value: "I have a new service, ${{ github.repository }}, that warrants its own unique title"
+      - path: jobs.deploy.steps.cpr.delete-branch
+        value: false
+      - path: jobs.deploy.steps.cpr.branch
+        value: some-other-custom-value
+      - path: jobs.deploy.steps.cpr.token
+        value: ${{ secrets.MY_CUSTOM_GITHUB_TOKEN }}
+      - path: jobs.deploy.steps.slack.slack-message
+        value: "This service also doesn't care about failure? Odd choice, ${{ github.repository }}, but your call..."
